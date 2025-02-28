@@ -2,7 +2,7 @@
 This program uses the Seeeduino LoRaWAN GPS to receive the actual localization of the bus, train, etc. This info goes to the TTN, where you can resend it elsewhere
 */
 
-// ---------------------------------------------------CONFIG------------------------------------------------------------//
+// ---------------------------------------------------CONFIG------------------------------------------------------------ //
 #include <TinyGPSPlus.h>
 #include <LoRaWan.h>
 #include <tinyFrame.h>
@@ -29,7 +29,7 @@ char devEUI[] = "70B3D57ED006BB05";
 char AppEUI[] = "0000000000000000";
 
 
-// ---------------------------------------------------SCRIPT------------------------------------------------------------//
+// ---------------------------------------------------SCRIPT------------------------------------------------------------ //
 
 void setup()
 {
