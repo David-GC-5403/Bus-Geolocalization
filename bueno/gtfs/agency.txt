@@ -1,0 +1,10 @@
+agency_id, agency_name,agency_url,agency_timezone,agency_phone,agency_lang,agency_fare_url
+CTMAS,Red de Consorcios de Transporte de Andalucía - Área de Sevilla,http://siu.ctas.ctan.es/es/index.php,Europe/Madrid,955053390,es,http://siu.ctas.ctan.es/tarifa.php
+CMTBC,Red de Consorcios de Transporte de Andalucía - Bahía de Cádiz,http://www.cmtbc.es,Europe/Madrid,856100495,es,http://siu.cmtbc.es/tarifa.php
+CTAG,Red de Consorcios de Transporte de Andalucía - Área de Granada,http://siu.ctagr.es/es/index.php,Europe/Madrid,958575001,es,http://siu.ctagr.com/tarifa.php
+CTMAM,Red de Consorcios de Transporte de Andalucía - Área de Málaga,http://siu.ctmam.ctan.es,Europe/Madrid,902450550,es,http://siu.ctmam.ctan.es/tarifa.php
+CTMCG,Red de Consorcios de Transporte de Andalucía - Campo de Gibraltar,http://siu.ctmcg.es/es/index.php,Europe/Madrid,856583746,es,http://siu.ctmcg.es/tarifa.php
+CTAL,Red de Consorcios de Transporte de Andalucía - Área de Almería,http://www.ctal.es,Europe/Madrid,950186570,es,http://siu.ctal.es/tarifa.php
+CTJA,Red de Consorcios de Transporte de Andalucía - Área de Jaén,https://siu.ctja.es/es/index.php,Europe/Madrid,953313980,es,http://siu.ctja.es/tarifa.php
+CTMAC,Red de Consorcios de Transporte de Andalucía - Área de Córdoba,http://www.ctco.es,Europe/Madrid,957354134,es,http://siu.ctco.es/tarifa.php
+CTHU,Red de Consorcios de Transporte de Andalucía - Costa de Huelva,http://siu.cthu.es/es/index.php,Europe/Madrid,959524744,es,http://siu.cthu.es/tarifa.php
