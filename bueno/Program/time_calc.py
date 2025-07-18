@@ -11,7 +11,7 @@ def config_influx():
     url = "http://localhost:8086"
 
     client = influxdb_client.InfluxDBClient(url=url, token=token, org=org) # Cliente de InfluxDB
-    writer = client.write_api(write_options=SYNCHRONOUS)  # API de escritura
+    writer = client.write_api()  # API de escritura
     reader = client.query_api()  # API de lectura
 
     return writer, reader, org, bucket
@@ -35,7 +35,6 @@ def read_influx(reader_api, org):
     return result
 
 def semiverseno(lat1, lon1, lat2, lon2):
-    # Calcula la distancia entre dos puntos geográficos usando el semiverseno
     return haversine((lat1, lon1), (lat2, lon2), unit='m')
 
 def parada_mas_cercana(lat_bus, lon_bus, stops):
@@ -75,7 +74,7 @@ last_data = None  # Variable para almacenar los últimos datos leídos
 while True:
     data_influx = read_influx(reader, org)
     if data_influx == last_data:
-        print("No hay nuevos datos en InfluxDB. Esperando...")
+        print("No hay nuevos datos en Influx. Esperando...")
         time.sleep(1*60)
         continue
 
@@ -89,7 +88,8 @@ while True:
     print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
 
     write_influx(writer, bucket, org, tiempo_restante)
-    print("Datos escritos en InfluxDB correctamente.")
+    time.sleep(1)
+    print("Datos escritos en Influx")
 
     last_data = data_influx
 
