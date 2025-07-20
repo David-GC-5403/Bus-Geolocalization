@@ -73,7 +73,7 @@ last_data = None  # Variable para almacenar los últimos datos leídos
 
 while True:
     data_influx = read_influx(reader, org)
-    if data_influx == last_data:
+    if data_influx == last_data or None:
         print("No hay nuevos datos en Influx. Esperando...")
         time.sleep(1*60)
         continue
