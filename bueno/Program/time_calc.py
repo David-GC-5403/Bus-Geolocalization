@@ -18,13 +18,22 @@ def config_influx():
     return writer, reader, org, bucket
 
 def read_file():
+    # Lee los archivos y carga los datos en variables
     with open("bueno/Program/paradas.csv", "r", newline='', encoding="utf-8") as file:
         file_reader = csv.reader(file)
-        header = next(file_reader)
+        header_stops = next(file_reader)
         stops = []
         for row in file_reader:
-            stops.append(dict(zip(header, row)))
-        return stops
+            stops.append(dict(zip(header_stops, row)))
+
+    with open ("bueno/Program/stop_times.csv", "r", newline='', encoding="utf-8") as file:
+        file_reader = csv.reader(file)
+        header_times = next(file_reader)
+        stop_times = []
+        for row in file_reader:
+            stop_times.append(dict(zip(header_times, row)))
+
+    return stops, stop_times
 
 def read_influx(reader_api, org):
     query = 'from(bucket: "Alumnos")\
@@ -52,8 +61,9 @@ def parada_mas_cercana(lat_bus, lon_bus, stops):
         if distancia < min_distancia:
             min_distancia = distancia
             parada_cercana = row
+            next_id = row["stop_id"]
     print(f"Parada más cercana: {parada_cercana['stop_name']} a {min_distancia:.2f} metros")
-    return parada_cercana, min_distancia
+    return next_id, min_distancia
 
 def calc_tiempo(distancia, velocidad):
     # Calcula el tiempo en segundos que tarda en recorrer una distancia a una velocidad dada
@@ -65,6 +75,40 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     point = influxdb_client.Point("mqtt_consumer").tag("device", "bus").field("tiempo_restante", tiempo_restante)
     writer_api.write(bucket=bucket, org=org, record=point)
 
+def read_sequence(stop_times, siguiente_parada):
+    # Partiendo de que conocemos las paradas con su id, accedemos a stop_times.csv para obtener la secuencia de paradas
+    sequence = []
+    #finished = False
+    #j = 1
+    valor_secuencia_inicial = 0
+
+    for row in stop_times:
+        if row["stop_id"] == siguiente_parada: # Busca la parada
+            valor_secuencia_inicial = row["stop_sequence"] # Valor actual de la secuencia
+            index = row # Indice del valor inicial
+
+        if valor_secuencia_inicial is not 0: 
+            if row+1["stop_sequence"] < valor_secuencia_inicial:
+                valor_secuencia_final = row["stop_sequence"]
+                break
+
+    for i in range(1, valor_secuencia_final+1, 1):
+        indice_ordenacion = row - valor_secuencia_inicial+i
+        sequence.append(indice_ordenacion["stop_id"])
+
+    return sequence
+
+#    sequence.append(valor_secuencia_inicial)
+#
+#    if valor_secuencia_inicial is not 1:
+#        while not finished:
+#            if row-j["stop_sequence"] <= valor_secuencia_inicial: # El valor anterior 
+#                sequence.insert(0, row-j["stop_sequence"])        
+#            else:
+#                sequence.append(row-j["stop_sequence"])        
+
+
+
 
 # Main #
 
@@ -72,7 +116,7 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
 while True:
     try:
         [writer, reader, org, bucket] = config_influx()
-        stops = read_file()
+        [stops, stop_times] = read_file()
         timestamp = None
 
         break
@@ -104,7 +148,7 @@ while True:
         lon_bus = data_influx[1].records[0].get_value()
         v_bus = data_influx[2].records[0].get_value()
 
-        [_, dist_parada] = parada_mas_cercana(lat_bus, lon_bus, stops)
+        [siguiente_parada, dist_parada] = parada_mas_cercana(lat_bus, lon_bus, stops)
 
         tiempo_restante = calc_tiempo(dist_parada, v_bus)
         print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
