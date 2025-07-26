@@ -31,7 +31,7 @@ def read_file():
         stop_times = []
         for row in file_reader:
             stops.append(dict(zip(header_times, row)))
-            
+
     return stops, stop_times
 
 def read_influx(reader_api, org):
@@ -57,10 +57,11 @@ def parada_mas_cercana(lat_bus, lon_bus, stops):
         lon_parada = float(row['stop_lon'])
         distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-        if distancia < min_distancia:
+        if distancia < min_distancia: 
             min_distancia = distancia
-            parada_cercana = row
-    print(f"Parada más cercana: {parada_cercana['stop_name']} a {min_distancia:.2f} metros")
+            parada_cercana = row["stop_name"]
+
+    print(f"Parada más cercana: {parada_cercana} a {min_distancia:.2f} metros")
     return parada_cercana, min_distancia
 
 def calc_tiempo(distancia, velocidad):
@@ -73,7 +74,22 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     point = influxdb_client.Point("mqtt_consumer").tag("device", "bus").field("tiempo_restante", tiempo_restante)
     writer_api.write(bucket=bucket, org=org, record=point)
 
-def read_sequence
+def read_sequence(stop_times, primera_parada, segunda_parada, sequence):
+    for row in stop_times:
+        if row["stop_id"] == primera_parada: # Busca la id de la parada más cercana
+            if row+1["stop_id"] == segunda_parada: 
+                # Si la siguiente parada en la lista es la real, hemos encontrado la ruta
+                valor_secuencia_inicial = row["stop_sequence"] # Guarda la secuencia de la primera parada (la segunda que haya pillado)
+                trip_id = row["trip_id"]
+
+    # Encontrado el trip_id, ahora buscamos la secuencia de paradas
+    for row in stop_times:
+        if row["trip_id"] == trip_id:
+            sequence.append(row["stop_id"])   
+
+    return sequence
+
+
 
 # Main #
 
@@ -81,8 +97,10 @@ def read_sequence
 while True:
     try:
         [writer, reader, org, bucket] = config_influx()
-        stops = read_file()
+        [stops, stop_times] = read_file()
         timestamp = None
+        allow_read_sequence = False
+        sequence = []
 
         break
 
@@ -113,7 +131,15 @@ while True:
         lon_bus = data_influx[1].records[0].get_value()
         v_bus = data_influx[2].records[0].get_value()
 
-        [_, dist_parada] = parada_mas_cercana(lat_bus, lon_bus, stops)
+        [parada_cercana, dist_parada, _] = parada_mas_cercana(lat_bus, lon_bus, stops)
+
+        if allow_read_sequence is False:
+            if parada_cercana != parada_cercana_old: # Si la parada más cercana ha cambiado, permite la lectura de la secuencia
+                allow_read_sequence = True
+                sequence.append(parada_cercana_old) 
+
+        parada_cercana_old = parada_cercana
+
 
         tiempo_restante = calc_tiempo(dist_parada, v_bus)
         print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
