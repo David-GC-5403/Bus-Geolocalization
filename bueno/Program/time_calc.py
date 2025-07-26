@@ -24,7 +24,15 @@ def read_file():
         stops = []
         for row in file_reader:
             stops.append(dict(zip(header, row)))
-        return stops
+
+    with open("bueno/Program/stop_times.csv", "r", newline='', encoding="utf-8") as file:
+        file_reader = csv.reader(file)
+        header_times = next(file_reader)
+        stop_times = []
+        for row in file_reader:
+            stops.append(dict(zip(header_times, row)))
+            
+    return stops, stop_times
 
 def read_influx(reader_api, org):
     query = 'from(bucket: "Alumnos")\
@@ -65,6 +73,7 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     point = influxdb_client.Point("mqtt_consumer").tag("device", "bus").field("tiempo_restante", tiempo_restante)
     writer_api.write(bucket=bucket, org=org, record=point)
 
+def read_sequence
 
 # Main #
 
