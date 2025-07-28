@@ -30,7 +30,7 @@ def read_file():
         header_times = next(file_reader)
         stop_times = []
         for row in file_reader:
-            stops.append(dict(zip(header_times, row)))
+            stop_times.append(dict(zip(header_times, row)))
 
     return stops, stop_times
 
@@ -47,22 +47,31 @@ def read_influx(reader_api, org):
 def semiverseno(lat1, lon1, lat2, lon2):
     return haversine((lat1, lon1), (lat2, lon2), unit='m')
 
-def parada_mas_cercana(lat_bus, lon_bus, stops):
+def parada_mas_cercana(lat_bus, lon_bus, stops, sequence, valor_secuencia_inicial, allow_read_sequence, coords_secuencia):
     # Encuentra la parada más cercana a las coordenadas dadas
-    min_distancia = float('inf')
-    parada_cercana = None
+    if allow_read_sequence == False:
+        min_distancia = float('inf')
+        parada_cercana = None
 
-    for row in stops:
-        lat_parada = float(row['stop_lat'])
-        lon_parada = float(row['stop_lon'])
-        distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+        for row in stops:
+            lat_parada = float(row['stop_lat'])
+            lon_parada = float(row['stop_lon'])
+            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-        if distancia < min_distancia: 
-            min_distancia = distancia
-            parada_cercana = row["stop_name"]
+            if distancia < min_distancia: 
+                min_distancia = distancia
+                parada_cercana = row["stop_name"]
+    
+        print(f"Parada más cercana: {parada_cercana} a {min_distancia:.2f} metros")
 
-    print(f"Parada más cercana: {parada_cercana} a {min_distancia:.2f} metros")
-    return parada_cercana, min_distancia
+    else: # Calcula la distancia según la secuencia
+        secuencia_inicial_num = int(valor_secuencia_inicial) # Convierte el valor de secuencia a entero
+        for i in range(len(secuencia_inicial_num, sequence+1)): # Crea un rango de paradas desde la secuencia inicial hasta la última parada
+            lat_parada = coords_secuencia[i*2]
+            lon_parada = coords_secuencia[i*2 + 1]
+            distancia_secuencial = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+
+    return parada_cercana, min_distancia, distancia_secuencial
 
 def calc_tiempo(distancia, velocidad):
     # Calcula el tiempo en segundos que tarda en recorrer una distancia a una velocidad dada
@@ -85,9 +94,13 @@ def read_sequence(stop_times, primera_parada, segunda_parada, sequence):
     # Encontrado el trip_id, ahora buscamos la secuencia de paradas
     for row in stop_times:
         if row["trip_id"] == trip_id:
-            sequence.append(row["stop_id"])   
+            sequence.append(row["stop_id"]) # En teoría las paradas ya vienen ordenadas por secuencia
+            # Guarda también las coordenadas de cada parada en la secuencia
+            coords_secuencia.append(float(row["stop_lat"]))
+            coords_secuencia.append(float(row["stop_lon"]))
+    
 
-    return sequence
+    return sequence, valor_secuencia_inicial, coords_secuencia
 
 
 
@@ -101,6 +114,7 @@ while True:
         timestamp = None
         allow_read_sequence = False
         sequence = []
+        coords_secuencia = []
 
         break
 
@@ -111,37 +125,46 @@ while True:
 
 # Loop principal
 while True:
-    data_influx = read_influx(reader, org)
+    while allow_read_sequence is False: # Repite mientras no haya llegado a la segunda parada
+        data_influx = read_influx(reader, org)
 
-    # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
-    try:
-        if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
-            print("No hay nuevos datos en Influx. Esperando...")
-            time.sleep(30) # Pausa para dejar que lleguen los datos
+        # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
+        try:
+            if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
+                print("No hay nuevos datos en Influx. Esperando...")
+                time.sleep(30) # Pausa para dejar que lleguen los datos
+                continue
+        except IndexError:
+            print("No se han encontrado datos en Influx. Esperando...")
+            time.sleep(30)
             continue
-    except IndexError:
-        print("No se han encontrado datos en Influx. Esperando...")
-        time.sleep(30)
-        continue
 
-    # Si hay datos nuevos, procesa la información
-    try:
-        timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
-        lat_bus = data_influx[0].records[0].get_value()
-        lon_bus = data_influx[1].records[0].get_value()
-        v_bus = data_influx[2].records[0].get_value()
+        # Si hay datos nuevos, procesa la información
+        try:
+            timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
+            lat_bus = data_influx[0].records[0].get_value()
+            lon_bus = data_influx[1].records[0].get_value()
+            v_bus = data_influx[2].records[0].get_value()
 
-        [parada_cercana, dist_parada, _] = parada_mas_cercana(lat_bus, lon_bus, stops)
+            [parada_cercana, dist_parada, _] = parada_mas_cercana(lat_bus, lon_bus, stops, sequence, valor_secuencia_inicial=None, allow_read_sequence=allow_read_sequence, coords_secuencia=coords_secuencia)
 
-        if allow_read_sequence is False:
-            if parada_cercana != parada_cercana_old: # Si la parada más cercana ha cambiado, permite la lectura de la secuencia
-                allow_read_sequence = True
-                sequence.append(parada_cercana_old) 
+            if allow_read_sequence is False: # Entra aqui si no ha llegado a la 2º parada antes
+                if parada_cercana != parada_cercana_old: # Si ha llegado a la segunda parada, lee la secuencia
+                    allow_read_sequence = True
+                    [sequence, inicio_secuencia, coords_secuencia] = read_sequence(stop_times, parada_cercana_old, parada_cercana, sequence)
 
-        parada_cercana_old = parada_cercana
+            parada_cercana_old = parada_cercana # Guarda la parada más cercana para la siguiente iteración
 
+            time.sleep(30)
 
-        tiempo_restante = calc_tiempo(dist_parada, v_bus)
+        except Exception as e: 
+            print(f"Error al procesar los datos: {e}")
+            #time.sleep(60)
+            continue
+
+        [_, _, distancia_secuencial] = parada_mas_cercana(lat_bus, lon_bus, stops, sequence=sequence, valor_secuencia_inicial=inicio_secuencia, allow_read_sequence=allow_read_sequence, coords_secuencia=coords_secuencia)
+
+        tiempo_restante = calc_tiempo(distancia_secuencial, v_bus)
         print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
 
         write_influx(writer, bucket, org, 10)
@@ -163,8 +186,5 @@ while True:
 
             time.sleep(segundos_espera)
 
-    except Exception as e: 
-        print(f"Error al procesar los datos: {e}")
-        #time.sleep(60)
-        continue
+
 
