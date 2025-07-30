@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 import time
 
 def config_influx():
+    # Configura la conexion con influx, así como el cliente para usarlo en el codigo
+
     bucket = "Alumnos"
     org = "TFG"
     token = "TmYTccKyAKj-meNu-JpQH7-iACOI_5mgWCeasgeyjHsLxFG7azZNJvwARDpyJ8ZNSKD9rqAAxnqBRZXN3Mjl5w=="
@@ -19,14 +21,15 @@ def config_influx():
 
 def read_file():
     # Lee los archivos y carga los datos en variables
-    with open("bueno/Program/paradas.csv", "r", newline='', encoding="utf-8") as file:
+
+    with open("bueno/Program/paradas.csv", "r", newline='', encoding="utf-8") as file: # Info de paradas
         file_reader = csv.reader(file)
         header = next(file_reader)
         stops = []
         for row in file_reader:
             stops.append(dict(zip(header, row)))
 
-    with open("bueno/Program/stop_times.csv", "r", newline='', encoding="utf-8") as file:
+    with open("bueno/Program/stop_times.csv", "r", newline='', encoding="utf-8") as file: # Info de trayectos
         file_reader = csv.reader(file)
         header_times = next(file_reader)
         stop_times = []
@@ -36,6 +39,7 @@ def read_file():
     return stops, stop_times
 
 def read_influx(reader_api, org):
+    # Configura el query para recibir los datos. Despues realiza el envio
     query = 'from(bucket: "Alumnos")\
   |> range(start: -15m)\
   |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")\
@@ -46,8 +50,10 @@ def read_influx(reader_api, org):
     return result
 
 def semiverseno(lat1, lon1, lat2, lon2):
+    # Calcula el semiverseno (distancia entre 2 puntos)
     return haversine((lat1, lon1), (lat2, lon2), unit='m')
 
+<<<<<<< Updated upstream
 def parada_mas_cercana(lat_bus, lon_bus, stops, sequence, valor_secuencia_inicial, allow_read_sequence, coords_secuencia):
     # Encuentra la parada más cercana a las coordenadas dadas
     ultima_parada = False
@@ -55,15 +61,48 @@ def parada_mas_cercana(lat_bus, lon_bus, stops, sequence, valor_secuencia_inicia
         min_distancia = float('inf')
         distancia_secuencial = float('inf')
         parada_cercana = None
+=======
+
+def parada_mas_cercana_libre(lat_bus, lon_bus, stops, last_distance):
+    # Encuentra la parada más cercana a las coordenadas dadas, comprobando con todas las paradas
+    print("Calculando distancia libre:")
+>>>>>>> Stashed changes
 
         for row in stops:
             lat_parada = float(row['stop_lat'])
             lon_parada = float(row['stop_lon'])
             distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
+<<<<<<< Updated upstream
             if distancia < min_distancia: 
                 min_distancia = distancia
                 parada_cercana = row["stop_name"]
+=======
+    for row in stops:
+        lat_parada = float(row['stop_lat'])
+        lon_parada = float(row['stop_lon'])
+        distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+
+        if distancia < min_distancia: 
+            min_distancia = distancia
+            parada_cercana = row["stop_name"]
+
+    print(f"Parada más cercana: {parada_cercana} a {min_distancia:.2f} metros")
+    last_distance = min_distancia # Ultima distancia calculada
+
+    return parada_cercana, min_distancia, last_distance
+
+
+def parada_mas_cercana_seq(lat_bus, lon_bus, sequence, coords_secuencia,
+                           valor_secuencia_inicial, last_distance, indice_parada_actual):
+    # Calcula la distancia según la secuencia de la ruta
+    print("Calculando distancia secuencial:")
+
+    global reboot # Variable para reiniciar en caso de que se llegue al final de la ruta
+
+    distancia_secuencial = float("inf")
+    valor_secuencia_inicial_int = int(valor_secuencia_inicial) # Convierte el valor de secuencia a entero
+>>>>>>> Stashed changes
     
         print(f"Parada más cercana: {parada_cercana} a {min_distancia:.2f} metros")
 
@@ -89,7 +128,12 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     point = influxdb_client.Point("mqtt_consumer").tag("device", "bus").field("tiempo_restante", tiempo_restante)
     writer_api.write(bucket=bucket, org=org, record=point)
 
+<<<<<<< Updated upstream
 def read_sequence(stop_times, primera_parada, segunda_parada, sequence):
+=======
+
+def read_sequence(stop_times, primera_parada, segunda_parada):
+>>>>>>> Stashed changes
     coords_secuencia = []
     for i in range(len(stop_times) - 1): # Recorre las paradas
         if stop_times[i]["stop_id"] == primera_parada: # Busca la id de la parada más cercana
@@ -116,6 +160,7 @@ def read_sequence(stop_times, primera_parada, segunda_parada, sequence):
 # Configuración inicial
 while True:
     try:
+        # Variables
         [writer, reader, org, bucket] = config_influx()
         [stops, stop_times] = read_file()
         timestamp = None
@@ -124,7 +169,14 @@ while True:
         coords_secuencia = []
         parada_cercana_old = None
         inicio_secuencia = None
+<<<<<<< Updated upstream
         ultima_parada = False
+=======
+        last_distance = float('inf')
+        indice_parada_actual = None
+        last_lat, last_lon = 0, 0 # Se inician a 0 de forma que la primera medida siempre se considere cambio brusco (el gps a veces da problemas al iniciar)
+        reboot = False
+>>>>>>> Stashed changes
 
         break
 
@@ -133,10 +185,27 @@ while True:
         time.sleep(1)
         continue
 
+
 # Loop principal
 while True:
+<<<<<<< Updated upstream
     while allow_read_sequence is False or ultima_parada: # Repite mientras no haya llegado a la segunda parada, o si ha llegado a la última parada y va a dar la vuelta
         data_influx = read_influx(reader, org)
+=======
+    # Obtención de datos de InfluxDB
+    data_influx = read_influx(reader, org)
+
+    # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
+    try:
+        if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
+            print("No hay nuevos datos en Influx. Esperando...")
+            time.sleep(1) # Pausa para dejar que lleguen los datos
+            continue
+    except IndexError:
+        print("No se han encontrado datos en Influx. Esperando...")
+        time.sleep(30)
+        continue
+>>>>>>> Stashed changes
 
         # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
         try:
@@ -149,6 +218,7 @@ while True:
             time.sleep(30)
             continue
 
+<<<<<<< Updated upstream
         # Si hay datos nuevos, procesa la información
         try:
             timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
@@ -166,6 +236,18 @@ while True:
             parada_cercana_old = parada_cercana # Guarda la parada más cercana para la siguiente iteración
 
             time.sleep(30) # Puede que cambie este tiempo
+=======
+            if parada_cercana != parada_cercana_old and parada_cercana_old is not None: # Si ha llegado a la segunda parada, lee la secuencia
+                allow_read_sequence = True
+                [sequence, inicio_secuencia, coords_secuencia] = read_sequence(stop_times, parada_cercana_old, 
+                                                                               parada_cercana)
+                continue # Vuelve a empezar el bucle para pasar al segundo bloque
+
+            else: # Si aun no ha llegado a la siguiente parada
+                parada_cercana_old = parada_cercana # Guarda la parada más cercana para la siguiente iteración            
+
+                proxima_medida = timestamp + timedelta(minutes=3) # Configura la espera hasta 3 minutos tras la llegada del ultimo mensaje
+>>>>>>> Stashed changes
 
         except Exception as e: 
             print(f"Error al procesar los datos: {e}")
@@ -180,7 +262,12 @@ while True:
         write_influx(writer, bucket, org, 10)
         print("Datos escritos en Influx")
 
+<<<<<<< Updated upstream
         cambio_brusco = haversine((lat_bus, lon_bus), (last_lat, last_lon), unit='m') > 50  # Cambia brusco si se mueve más de 50 metros
+=======
+        # Comprueba si ha habido un cambio brusco de posición
+        cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50  # Cambia brusco si se mueve más de 50 metros
+>>>>>>> Stashed changes
         if cambio_brusco:
             proxima_medida = timestamp + timedelta(minutes=2) # Espera al siguiente mensaje, a los 2 minutos, si hay cambio brusco
         else:
@@ -194,7 +281,19 @@ while True:
             print(f"Hora actual: {datetime.now(timezone.utc).strftime('%H:%M:%S')}")
             print(f"Esperando hasta: {proxima_medida.strftime('%H:%M:%S')} ({int(segundos_espera)} segundos)")
 
+<<<<<<< Updated upstream
             time.sleep(segundos_espera)
+=======
+
+
+    if reboot:  # Si se ha alcanzado el final del trayecto, reinicia las variables
+        print("Reiniciando variables...")
+>>>>>>> Stashed changes
 
 
 
+<<<<<<< Updated upstream
+=======
+
+    tiempo_espera(proxima_medida)
+>>>>>>> Stashed changes
