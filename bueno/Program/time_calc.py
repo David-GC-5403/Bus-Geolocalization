@@ -129,7 +129,12 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     writer_api.write(bucket=bucket, org=org, record=point)
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 def read_sequence(stop_times, primera_parada, segunda_parada, sequence):
+=======
+
+def read_sequence(stop_times, primera_parada, segunda_parada):
+>>>>>>> Stashed changes
 =======
 
 def read_sequence(stop_times, primera_parada, segunda_parada):
@@ -247,6 +252,9 @@ while True:
                 parada_cercana_old = parada_cercana # Guarda la parada más cercana para la siguiente iteración            
 
                 proxima_medida = timestamp + timedelta(minutes=3) # Configura la espera hasta 3 minutos tras la llegada del ultimo mensaje
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
         except Exception as e: 
@@ -263,8 +271,11 @@ while True:
         print("Datos escritos en Influx")
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         cambio_brusco = haversine((lat_bus, lon_bus), (last_lat, last_lon), unit='m') > 50  # Cambia brusco si se mueve más de 50 metros
 =======
+=======
+>>>>>>> Stashed changes
         # Comprueba si ha habido un cambio brusco de posición
         cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50  # Cambia brusco si se mueve más de 50 metros
 >>>>>>> Stashed changes
@@ -286,6 +297,8 @@ while True:
 =======
 
 
+
+
     if reboot:  # Si se ha alcanzado el final del trayecto, reinicia las variables
         print("Reiniciando variables...")
 >>>>>>> Stashed changes
@@ -294,6 +307,7 @@ while True:
 
 <<<<<<< Updated upstream
 =======
+
 
     tiempo_espera(proxima_medida)
 >>>>>>> Stashed changes
