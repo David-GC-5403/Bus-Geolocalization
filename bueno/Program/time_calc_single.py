@@ -83,7 +83,7 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
         if index_ida <= len(stops_ida):
             lat_parada = coord_ida[index_ida*2]
             lon_parada = coord_ida[index_ida*2 + 1]
-            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)u
+            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
             
             # Comprueba si ha pasado la parada
             if parada_ya_pasada(last_distance, distancia):
@@ -200,6 +200,7 @@ while True:
         last_distance = float('inf')
         indice_parada_actual = None
         reboot = False
+        last_lat, last_lon = 0, 0
 
         index_ida, index_vuelta = 1, 1 # Empieza en la segunda parada, ya que la primera es redundante
                                        # (La primera de la ida es la ultima de la vuelta, y viceversa)
@@ -265,6 +266,9 @@ while True:
             proxima_medida = timestamp + timedelta(minutes=1) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
         else:
             proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
+
+        last_lat = lat_bus
+        last_lon = lon_bus
 
     if reboot:  # Si se ha alcanzado el final del trayecto, reinicia las variables
         print("Reiniciando variables...")
