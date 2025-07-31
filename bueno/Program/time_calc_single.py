@@ -83,19 +83,21 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
         if index_ida <= len(stops_ida):
             lat_parada = coord_ida[index_ida*2]
             lon_parada = coord_ida[index_ida*2 + 1]
-            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
-
+            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)u
+            
+            # Comprueba si ha pasado la parada
             if parada_ya_pasada(last_distance, distancia):
                 index_ida += 1
                 
                 # Calcula la nueva distancia, hacia la siguiente parada
-                if index_ida < len(stops_ida):
+                if index_ida <= len(stops_ida):
                     lat_parada = coord_ida[index_ida*2]
                     lon_parada = coord_ida[index_ida*2 + 1]
                     distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
                 elif index_ida > len(stops_ida): # Ida completa, toca volver
                     ida = False
+                    index_ida = 1
 
     else:
         if index_vuelta <= len(stops_vuelta):
@@ -112,14 +114,13 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
 
             elif index_vuelta > len(stops_vuelta): # Vuelta completa, toca ir
                 ida = True
+                index_vuelta = 1
 
     
     last_distance = distancia
 
     return distancia, last_distance, index_ida, index_vuelta, ida
  
-# como tengo el indice de ida, cuando este llegue al maximo significa que toca dar la vuelta
-# Se reinicia el indice y ida = False
 
 def parada_ya_pasada(last_distance, now_distance):
     # Comprueba si ha pasado la ultima parada
@@ -142,17 +143,14 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     writer_api.write(bucket=bucket, org=org, record=point)
 
 
-def lee_secuencia(ida, vuelta):
+def lee_secuencia(ida, vuelta, seq_ida, seq_vuelta):
     # Stop_id de las rutas
-    seq_ida = []
-    seq_vuelta = []
 
     # Coordenadas de las rutas
     coords_ida = []
     coords_vuelta = []
 
     for i in range(len(stop_times)): # Recorre las paradas
-
         if stop_times[i]["trip_id"] == ida: # Busca la info de la ida
             seq_ida.append(stop_times[i]["stop_id"]) # Guarda la secuencia de paradas
             coords_ida.append(float(stop_times[i]["stop_lat"]))
@@ -166,7 +164,6 @@ def lee_secuencia(ida, vuelta):
     return seq_ida, coords_ida, seq_vuelta, coords_vuelta
 
 
-
 def tiempo_espera(proxima_medida):
     if datetime.now(timezone.utc) < proxima_medida: # Comprueba la hora actual. Si es menor que la hora de la proxima medida, espera
             segundos_espera = (proxima_medida - datetime.now(timezone.utc)).total_seconds()
@@ -174,6 +171,7 @@ def tiempo_espera(proxima_medida):
             print(f"Esperando hasta: {proxima_medida.strftime('%H:%M:%S')} ({int(segundos_espera)} segundos)")
 
             time.sleep(segundos_espera)
+
 
 def reiniciar_variables():
     # Reincia las variables para prepararlas para la siguiente ruta
@@ -201,11 +199,12 @@ while True:
         inicio_secuencia = None
         last_distance = float('inf')
         indice_parada_actual = None
-        last_lat, last_lon = 0, 0
         reboot = False
 
-        index_ida = 0
-        index_vuelta = 0
+        index_ida, index_vuelta = 1, 1 # Empieza en la segunda parada, ya que la primera es redundante
+                                       # (La primera de la ida es la ultima de la vuelta, y viceversa)
+        seq_ida, seq_vuelta = None, None 
+        ida = True
 
         break
 
@@ -240,10 +239,7 @@ while True:
     # Bloque de calculo de distancia a todas las paradas
     if seq_ida or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
         try:
-            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(id_ruta_ida, id_ruta_vuelta)            
-
-            proxima_medida = timestamp + timedelta(minutes=3)
-            tiempo_espera(proxima_medida)
+            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(id_ruta_ida, id_ruta_vuelta, seq_ida, seq_vuelta)            
 
         except Exception as e: 
             print(f"Error al leer la secuencia: {e}")
@@ -269,10 +265,6 @@ while True:
             proxima_medida = timestamp + timedelta(minutes=1) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
         else:
             proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
-
-        last_lat = lat_bus
-        last_lon = lon_bus
-
 
     if reboot:  # Si se ha alcanzado el final del trayecto, reinicia las variables
         print("Reiniciando variables...")
