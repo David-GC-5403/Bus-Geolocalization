@@ -53,27 +53,6 @@ def semiverseno(lat1, lon1, lat2, lon2):
     return haversine((lat1, lon1), (lat2, lon2), unit='m')
 
 
-def parada_mas_cercana_libre(lat_bus, lon_bus, stops, last_distance):
-    # Encuentra la parada más cercana a las coordenadas dadas
-    print("Calculando distancia libre:")
-
-    min_distancia = float('inf')
-    parada_cercana = None
-
-    for row in stops:
-        lat_parada = float(row['stop_lat'])
-        lon_parada = float(row['stop_lon'])
-        distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
-
-        if distancia < min_distancia: 
-            min_distancia = distancia
-            parada_cercana = row["stop_name"]
-
-    print(f"Parada más cercana: {parada_cercana} a {min_distancia:.2f} metros")
-    last_distance = min_distancia
-
-    return parada_cercana, min_distancia, last_distance
-
 def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida, 
               coord_vuelta, ida, last_distance, index_ida, index_vuelta):
     
@@ -144,8 +123,6 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
 
 
 def lee_secuencia(ida, vuelta, seq_ida, seq_vuelta):
-    # Stop_id de las rutas
-
     # Coordenadas de las rutas
     coords_ida = []
     coords_vuelta = []
@@ -173,18 +150,6 @@ def tiempo_espera(proxima_medida):
             time.sleep(segundos_espera)
 
 
-def reiniciar_variables():
-    # Reincia las variables para prepararlas para la siguiente ruta
-    allow_read_sequence = False
-    indice_parada_actual = None
-    sequence = []
-    coords_secuencia = []
-    parada_cercana_old = None
-    inicio_secuencia = None
-    last_distance = float('inf')
-
-    return allow_read_sequence, indice_parada_actual, sequence, coords_secuencia, parada_cercana_old, inicio_secuencia, last_distance
-
 # Main #
 
 # Configuración inicial
@@ -194,12 +159,7 @@ while True:
         [writer, reader, org, bucket] = config_influx()
         [stops, stop_times] = read_file()
         timestamp = None
-        allow_read_sequence = False 
-        parada_cercana_old = None
-        inicio_secuencia = None
         last_distance = float('inf')
-        indice_parada_actual = None
-        reboot = False
         last_lat, last_lon = 0, 0
 
         index_ida, index_vuelta = 1, 1 # Empieza en la segunda parada, ya que la primera es redundante
@@ -269,14 +229,5 @@ while True:
 
         last_lat = lat_bus
         last_lon = lon_bus
-
-    if reboot:  # Si se ha alcanzado el final del trayecto, reinicia las variables
-        print("Reiniciando variables...")
-
-        [allow_read_sequence, indice_parada_actual, 
-        sequence, coords_secuencia, parada_cercana_old, inicio_secuencia
-        , last_distance] = reiniciar_variables()
-
-        reboot = False
 
     tiempo_espera(proxima_medida)
