@@ -5,6 +5,10 @@ import csv
 from datetime import datetime, timedelta, timezone
 import time
 
+# Vamos a hacer la ruta primero de Algeciras a los barrios
+id_ruta_ida = "5_395_90" # Trip id de la primera ruta (siempre es la misma)
+id_ruta_vuelta = "5_410_90" # Trip id de la ruta de vuelta
+
 def config_influx():
     bucket = "Alumnos"
     org = "TFG"
@@ -70,48 +74,59 @@ def parada_mas_cercana_libre(lat_bus, lon_bus, stops, last_distance):
 
     return parada_cercana, min_distancia, last_distance
 
-
-def parada_mas_cercana_seq(lat_bus, lon_bus, sequence, coords_secuencia,
-                           valor_secuencia_inicial, last_distance, indice_parada_actual):
-    # Calcula la distancia según la secuencia de la ruta
-    print("Calculando distancia secuencial:")
-
-    global reboot # Variabke para reiniciar en caso de que se llegue al final de la ruta
-
-    distancia_secuencial = float("inf")
-    valor_secuencia_inicial_int = int(valor_secuencia_inicial) # Convierte el valor de secuencia a entero
+def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida, 
+              coord_vuelta, ida, last_distance, index_ida, index_vuelta):
     
-    if indice_parada_actual is None:
-        indice_parada_actual = valor_secuencia_inicial_int 
+    # Calcula la distancia a la siguiente parada según la secuencia
+    print("Calculando distancia a la siguiente parada:")
+    if ida == True:
+        if index_ida <= len(stops_ida):
+            lat_parada = coord_ida[index_ida*2]
+            lon_parada = coord_ida[index_ida*2 + 1]
+            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-    if indice_parada_actual < len(sequence): # Evita desbordar   
+            if parada_ya_pasada(last_distance, distancia):
+                index_ida += 1
+                
+                # Calcula la nueva distancia, hacia la siguiente parada
+                if index_ida < len(stops_ida):
+                    lat_parada = coord_ida[index_ida*2]
+                    lon_parada = coord_ida[index_ida*2 + 1]
+                    distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-        lat_parada = coords_secuencia[indice_parada_actual*2]
-        lon_parada = coords_secuencia[indice_parada_actual*2 + 1]
-        distancia_secuencial = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+                elif index_ida > len(stops_ida): # Ida completa, toca volver
+                    ida = False
 
-        if last_distance < distancia_secuencial: 
-        # Si la distancia minima actual es mayor que la anterior, ha pasado la parada y se esta alejando de ella
-            indice_parada_actual+= 1 # Avanza a la siguiente parada
+    else:
+        if index_vuelta <= len(stops_vuelta):
+            lat_parada = coord_vuelta[index_vuelta*2]
+            lon_parada = coord_vuelta[index_vuelta*2 + 1]
+            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-            # Vuelve a calcular la distancia, esta vez la correcta
-            if indice_parada_actual < len(sequence):
-                # Actualiza la nueva distancia mínima
-                lat_parada = coords_secuencia[indice_parada_actual * 2]
-                lon_parada = coords_secuencia[indice_parada_actual * 2 + 1]
-                distancia_secuencial = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
-            else:
-                print(f"Ha pasado la ultima parada.")
+            if parada_ya_pasada(last_distance, distancia) and index_vuelta < len(stops_vuelta):
+                index_vuelta += 1
 
-                lat_parada = coords_secuencia[(len(sequence)-1) * 2]
-                lon_parada = coords_secuencia[(len(sequence)-1) * 2 + 1]
-                distancia_secuencial = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+                lat_parada = coord_vuelta[index_vuelta*2]
+                lon_parada = coord_vuelta[index_vuelta*2 + 1]
+                distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-                reboot = True # Va a llegar a la ultima parada, renicia
+            elif index_vuelta > len(stops_vuelta): # Vuelta completa, toca ir
+                ida = True
 
-        last_distance = distancia_secuencial
+    
+    last_distance = distancia
 
-    return distancia_secuencial, last_distance, indice_parada_actual
+    return distancia, last_distance, index_ida, index_vuelta, ida
+ 
+# como tengo el indice de ida, cuando este llegue al maximo significa que toca dar la vuelta
+# Se reinicia el indice y ida = False
+
+def parada_ya_pasada(last_distance, now_distance):
+    # Comprueba si ha pasado la ultima parada
+    if last_distance < now_distance:
+        return True
+    else:
+        return False
 
 
 def calc_tiempo(distancia, velocidad):
@@ -123,29 +138,34 @@ def calc_tiempo(distancia, velocidad):
 
 def write_influx(writer_api, bucket, org, tiempo_restante):
     point = influxdb_client.Point("mqtt_consumer").tag("device", "bus").field("tiempo_restante", tiempo_restante)
+    # Habria que guardar la info en un tag con la id del dispositivo que envio las coordenadas
     writer_api.write(bucket=bucket, org=org, record=point)
 
 
-def read_sequence(stop_times, primera_parada, segunda_parada, sequence):
-    coords_secuencia = []
-    sequence = []
-    for i in range(len(stop_times)): # Recorre las paradas
-        if stop_times[i]["stop_id"] == primera_parada: # Busca la id de la parada más cercana
-            if stop_times[i+1]["stop_id"] == segunda_parada: 
-                # Si la siguiente parada en la lista es la real, hemos encontrado la ruta
-                valor_secuencia_inicial = stop_times[i]["stop_sequence"] # Guarda la secuencia de la primera parada (la segunda que haya pillado)
-                trip_id = stop_times[i]["trip_id"]
-                break # Ya tenemos el trip_id, no hace falta seguir
+def lee_secuencia(ida, vuelta):
+    # Stop_id de las rutas
+    seq_ida = []
+    seq_vuelta = []
 
-    # Encontrado el trip_id, ahora buscamos la secuencia de paradas
-    for row in stop_times:
-        if row["trip_id"] == trip_id:
-            sequence.append(row["stop_id"]) # En teoría las paradas ya vienen ordenadas por secuencia
-            # Guarda también las coordenadas de cada parada en la secuencia
-            coords_secuencia.append(float(row["stop_lat"]))
-            coords_secuencia.append(float(row["stop_lon"]))
-    
-    return sequence, valor_secuencia_inicial, coords_secuencia
+    # Coordenadas de las rutas
+    coords_ida = []
+    coords_vuelta = []
+
+    for i in range(len(stop_times)): # Recorre las paradas
+
+        if stop_times[i]["trip_id"] == ida: # Busca la info de la ida
+            seq_ida.append(stop_times[i]["stop_id"]) # Guarda la secuencia de paradas
+            coords_ida.append(float(stop_times[i]["stop_lat"]))
+            coords_ida.append(float(stop_times[i]["stop_lon"]))
+
+        elif stop_times[i]["trip_id"] == vuelta: # Busca la info de la vuelta
+            seq_vuelta.append(stop_times[i]["stop_id"]) # Guarda la secuencia de paradas
+            coords_vuelta.append(float(stop_times[i]["stop_lat"]))
+            coords_vuelta.append(float(stop_times[i]["stop_lon"]))
+
+    return seq_ida, coords_ida, seq_vuelta, coords_vuelta
+
+
 
 def tiempo_espera(proxima_medida):
     if datetime.now(timezone.utc) < proxima_medida: # Comprueba la hora actual. Si es menor que la hora de la proxima medida, espera
@@ -184,6 +204,9 @@ while True:
         last_lat, last_lon = 0, 0
         reboot = False
 
+        index_ida = 0
+        index_vuelta = 0
+
         break
 
     except Exception as e:
@@ -215,39 +238,24 @@ while True:
 
 
     # Bloque de calculo de distancia a todas las paradas
-    if allow_read_sequence is False: 
+    if seq_ida or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
         try:
-            [parada_cercana, dist_parada, last_distance] = parada_mas_cercana_libre(lat_bus, lon_bus, stops, 
-                                                                                    last_distance)
-
-            if parada_cercana != parada_cercana_old and parada_cercana_old is not None: # Si ha llegado a la segunda parada, lee la secuencia
-                allow_read_sequence = True
-                [sequence, inicio_secuencia, coords_secuencia] = read_sequence(stop_times, parada_cercana_old, 
-                                                                               parada_cercana)
-
-            parada_cercana_old = parada_cercana # Guarda la parada más cercana para la siguiente iteración            
-            
+            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(id_ruta_ida, id_ruta_vuelta)            
 
             proxima_medida = timestamp + timedelta(minutes=3)
             tiempo_espera(proxima_medida)
 
-
         except Exception as e: 
-            print(f"Error al calcular la distancia: {e}")
+            print(f"Error al leer la secuencia: {e}")
             #time.sleep(60)
             continue
     
-
-
-    # Bloque de cálculo de distancia según la secuencia
     else:
-        [distancia_secuencial, last_distance, indice_parada_actual] = parada_mas_cercana_seq(lat_bus, lon_bus, 
-                                                                               sequence, coords_secuencia,
-                                                                               inicio_secuencia, 
-                                                                               last_distance,
-                                                                               indice_parada_actual)
-        
-        tiempo_restante = calc_tiempo(distancia_secuencial, v_bus)
+        # Calcula la distancia a la siguiente parada
+        [distancia, last_distance, index_ida, index_vuelta, modo_ida] = next_stop(lat_bus, lon_bus, seq_ida, seq_vuelta, coords_ida,
+                       coords_vuelta, modo_ida, last_distance, index_ida, index_vuelta)
+
+        tiempo_restante = calc_tiempo(distancia, v_bus)
         print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
 
         try:
