@@ -25,10 +25,9 @@ def config_influx():
 def read_file():
     # Lee los archivos desde mi github y carga los datos en variables
 
-    stops = pd.read_csv("https://raw.githubusercontent.com/David-GC-5403/Bus-Geolocalization/refs/heads/main/bueno/Program/paradas.csv")
-    stop_times = pd.read_csv("https://raw.githubusercontent.com/David-GC-5403/Bus-Geolocalization/refs/heads/main/bueno/Program/stop_times.csv")
+    gtfs_data = pd.read_csv("https://raw.githubusercontent.com/David-GC-5403/Bus-Geolocalization/refs/heads/Pruebas/bueno/Program/stops_info.csv")
 
-    return stops, stop_times
+    return gtfs_data
 
 def read_influx(reader_api, org):
     query = 'from(bucket: "Alumnos")\
@@ -113,13 +112,13 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     writer_api.write(bucket=bucket, org=org, record=point)
 
 
-def lee_secuencia(df_stop_times, df_stops, ida, vuelta, seq_ida, seq_vuelta):
+def lee_secuencia(df_gtfs, ida, vuelta, seq_ida, seq_vuelta):
     # Coordenadas de las rutas
     coords_ida = []
     coords_vuelta = []
 
-    data_ida = df_stop_times[df_stop_times["trip_id"] == id_ruta_ida] # Info de la ida
-    data_vuelta = df_stop_times[df_stop_times["trip_id"] == id_ruta_vuelta] # Info de la vuelta
+    data_ida = df_gtfs[df_gtfs["trip_id"] == id_ruta_ida] # Info de la ida
+    data_vuelta = df_gtfs[df_gtfs["trip_id"] == id_ruta_vuelta] # Info de la vuelta
 
     seq_ida = data_ida["stop_id"] # Secuencia de paradas de la ida
     seq_vuelta = data_vuelta["stop_id"] # Secuencia de paradas de la vuelta
@@ -128,7 +127,7 @@ def lee_secuencia(df_stop_times, df_stops, ida, vuelta, seq_ida, seq_vuelta):
     lat_ida = df_stops[df_stops["stop_id"].isin(seq_ida)]["stop_lat"]
     lon_ida = df_stops[df_stops["stop_id"].isin(seq_ida)]["stop_lon"]
     lat_ida = lat_ida.tolist()
-    
+
     lat_vuelta = df_stops[df_stops["stop_id"].isin(seq_vuelta)]["stop_lat"]
     lon_vuelta = df_stops[df_stops["stop_id"].isin(seq_vuelta)]["stop_lon"]
 
