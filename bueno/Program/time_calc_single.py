@@ -4,6 +4,7 @@ from haversine import haversine
 import csv
 from datetime import datetime, timedelta, timezone
 import time
+import pandas as pd
 
 # Vamos a hacer la ruta primero de Algeciras a los barrios
 id_ruta_ida = "5_395_90" # Trip id de la primera ruta (siempre es la misma)
@@ -22,20 +23,10 @@ def config_influx():
     return writer, reader, org, bucket
 
 def read_file():
-    # Lee los archivos y carga los datos en variables
-    with open("bueno/Program/paradas.csv", "r", newline='', encoding="utf-8") as file:
-        file_reader = csv.reader(file)
-        header = next(file_reader)
-        stops = []
-        for row in file_reader:
-            stops.append(dict(zip(header, row)))
+    # Lee los archivos desde mi github y carga los datos en variables
 
-    with open("bueno/Program/stop_times.csv", "r", newline='', encoding="utf-8") as file:
-        file_reader = csv.reader(file)
-        header_times = next(file_reader)
-        stop_times = []
-        for row in file_reader:
-            stop_times.append(dict(zip(header_times, row)))
+    stops = pd.read_csv("https://raw.githubusercontent.com/David-GC-5403/Bus-Geolocalization/refs/heads/main/bueno/Program/paradas.csv")
+    stop_times = pd.read_csv("https://raw.githubusercontent.com/David-GC-5403/Bus-Geolocalization/refs/heads/main/bueno/Program/stop_times.csv")
 
     return stops, stop_times
 
@@ -122,12 +113,28 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     writer_api.write(bucket=bucket, org=org, record=point)
 
 
-def lee_secuencia(ida, vuelta, seq_ida, seq_vuelta):
+def lee_secuencia(df_stop_times, df_stops, ida, vuelta, seq_ida, seq_vuelta):
     # Coordenadas de las rutas
     coords_ida = []
     coords_vuelta = []
 
-    for i in range(len(stop_times)): # Recorre las paradas
+    data_ida = df_stop_times[df_stop_times["trip_id"] == id_ruta_ida] # Info de la ida
+    data_vuelta = df_stop_times[df_stop_times["trip_id"] == id_ruta_vuelta] # Info de la vuelta
+
+    seq_ida = data_ida["stop_id"] # Secuencia de paradas de la ida
+    seq_vuelta = data_vuelta["stop_id"] # Secuencia de paradas de la vuelta
+
+    # Guarda las coordenadas de las paradas
+    lat_ida = df_stops[df_stops["stop_id"].isin(seq_ida)]["stop_lat"]
+    lon_ida = df_stops[df_stops["stop_id"].isin(seq_ida)]["stop_lon"]
+    lat_ida = lat_ida.tolist()
+    
+    lat_vuelta = df_stops[df_stops["stop_id"].isin(seq_vuelta)]["stop_lat"]
+    lon_vuelta = df_stops[df_stops["stop_id"].isin(seq_vuelta)]["stop_lon"]
+
+    # Une los valores para crear las coordenadas
+    coords_ida = 
+for i in range(len(stop_times)): # Recorre las paradas
         if stop_times[i]["trip_id"] == ida: # Busca la info de la ida
             seq_ida.append(stop_times[i]["stop_id"]) # Guarda la secuencia de paradas
             coords_ida.append(float(stop_times[i]["stop_lat"]))
