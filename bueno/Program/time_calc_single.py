@@ -1,7 +1,6 @@
 import influxdb_client
 from influxdb_client.client.write_api import SYNCHRONOUS
 from haversine import haversine
-import csv
 from datetime import datetime, timedelta, timezone
 import time
 import pandas as pd
@@ -49,9 +48,8 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
     # Calcula la distancia a la siguiente parada según la secuencia
     print("Calculando distancia a la siguiente parada:")
     if ida == True:
-        if index_ida <= len(stops_ida):
-            lat_parada = coord_ida[index_ida*2]
-            lon_parada = coord_ida[index_ida*2 + 1]
+        if index_ida < len(stops_ida):
+            [lat_parada, lon_parada] = coord_ida[index_ida]
             distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
             
             # Comprueba si ha pasado la parada
@@ -59,9 +57,8 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
                 index_ida += 1
                 
                 # Calcula la nueva distancia, hacia la siguiente parada
-                if index_ida <= len(stops_ida):
-                    lat_parada = coord_ida[index_ida*2]
-                    lon_parada = coord_ida[index_ida*2 + 1]
+                if index_ida < len(stops_ida):
+                    [lat_parada, lon_parada] = coord_ida[index_ida]
                     distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
                 elif index_ida > len(stops_ida): # Ida completa, toca volver
@@ -69,21 +66,20 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
                     index_ida = 1
 
     else:
-        if index_vuelta <= len(stops_vuelta):
-            lat_parada = coord_vuelta[index_vuelta*2]
-            lon_parada = coord_vuelta[index_vuelta*2 + 1]
+        if index_vuelta < len(stops_vuelta):
+            [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
             distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
             if parada_ya_pasada(last_distance, distancia) and index_vuelta < len(stops_vuelta):
                 index_vuelta += 1
 
-                lat_parada = coord_vuelta[index_vuelta*2]
-                lon_parada = coord_vuelta[index_vuelta*2 + 1]
-                distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+                if index_ida < len(stops_ida):
+                    [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
+                    distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-            elif index_vuelta > len(stops_vuelta): # Vuelta completa, toca ir
-                ida = True
-                index_vuelta = 1
+                elif index_vuelta > len(stops_vuelta): # Retorno completo, toca ir
+                    ida = True
+                    index_vuelta = 1
 
     
     last_distance = distancia
@@ -112,37 +108,20 @@ def write_influx(writer_api, bucket, org, tiempo_restante):
     writer_api.write(bucket=bucket, org=org, record=point)
 
 
-def lee_secuencia(df_gtfs, ida, vuelta, seq_ida, seq_vuelta):
+def lee_secuencia(df_gtfs, trip_id_ida, trip_id_vuelta):
     # Coordenadas de las rutas
     coords_ida = []
     coords_vuelta = []
 
-    data_ida = df_gtfs[df_gtfs["trip_id"] == id_ruta_ida] # Info de la ida
-    data_vuelta = df_gtfs[df_gtfs["trip_id"] == id_ruta_vuelta] # Info de la vuelta
+    data_ida = df_gtfs[df_gtfs["trip_id"] == trip_id_ida] # Info de la ida
+    data_vuelta = df_gtfs[df_gtfs["trip_id"] == trip_id_vuelta] # Info de la vuelta
 
-    seq_ida = data_ida["stop_id"] # Secuencia de paradas de la ida
-    seq_vuelta = data_vuelta["stop_id"] # Secuencia de paradas de la vuelta
+    seq_ida = data_ida["stop_id"].tolist() # Secuencia de paradas de la ida
+    seq_vuelta = data_vuelta["stop_id"].tolist() # Secuencia de paradas de la vuelta
 
-    # Guarda las coordenadas de las paradas
-    lat_ida = df_stops[df_stops["stop_id"].isin(seq_ida)]["stop_lat"]
-    lon_ida = df_stops[df_stops["stop_id"].isin(seq_ida)]["stop_lon"]
-    lat_ida = lat_ida.tolist()
-
-    lat_vuelta = df_stops[df_stops["stop_id"].isin(seq_vuelta)]["stop_lat"]
-    lon_vuelta = df_stops[df_stops["stop_id"].isin(seq_vuelta)]["stop_lon"]
-
-    # Une los valores para crear las coordenadas
-    coords_ida = 
-for i in range(len(stop_times)): # Recorre las paradas
-        if stop_times[i]["trip_id"] == ida: # Busca la info de la ida
-            seq_ida.append(stop_times[i]["stop_id"]) # Guarda la secuencia de paradas
-            coords_ida.append(float(stop_times[i]["stop_lat"]))
-            coords_ida.append(float(stop_times[i]["stop_lon"]))
-
-        elif stop_times[i]["trip_id"] == vuelta: # Busca la info de la vuelta
-            seq_vuelta.append(stop_times[i]["stop_id"]) # Guarda la secuencia de paradas
-            coords_vuelta.append(float(stop_times[i]["stop_lat"]))
-            coords_vuelta.append(float(stop_times[i]["stop_lon"]))
+    # Guarda las coordenadas de las paradas en tuplas
+    coords_ida = list(zip(data_ida["stop_lat"], data_ida["stop_lon"]))
+    coords_vuelta = list(zip(data_vuelta["stop_lat"], data_vuelta["stop_lon"]))
 
     return seq_ida, coords_ida, seq_vuelta, coords_vuelta
 
@@ -163,7 +142,7 @@ def tiempo_espera(proxima_medida):
 while True:
     try:
         [writer, reader, org, bucket] = config_influx()
-        [stops, stop_times] = read_file()
+        gtfs_data = read_file()
         timestamp = None
         last_distance = float('inf')
         last_lat, last_lon = 0, 0
@@ -203,10 +182,10 @@ while True:
 
 
 
-    # Bloque de calculo de distancia a todas las paradas
-    if seq_ida or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
+    # Lectura de secuencia
+    if seq_ida is None or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
         try:
-            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(id_ruta_ida, id_ruta_vuelta, seq_ida, seq_vuelta)            
+            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(gtfs_data, id_ruta_ida, id_ruta_vuelta)            
 
         except Exception as e: 
             print(f"Error al leer la secuencia: {e}")
