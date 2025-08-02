@@ -22,13 +22,14 @@ def config_influx():
     return writer, reader, org, bucket
 
 def read_file():
-    # Lee los archivos desde mi github y carga los datos en variables
+    # Lee el archivo desde el github y lo carga con pandas
 
     gtfs_data = pd.read_csv("https://raw.githubusercontent.com/David-GC-5403/Bus-Geolocalization/refs/heads/Pruebas/bueno/Program/stops_info.csv")
 
     return gtfs_data
 
 def read_influx(reader_api, org):
+    # Query para obtener los datos de influx
     query = 'from(bucket: "Alumnos")\
   |> range(start: -15m)\
   |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")\
@@ -39,56 +40,64 @@ def read_influx(reader_api, org):
     return result
 
 def semiverseno(lat1, lon1, lat2, lon2):
+    # Calcula el semiverseno con las coordenadas dadas en metros
     return haversine((lat1, lon1), (lat2, lon2), unit='m')
 
 
 def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida, 
               coord_vuelta, ida, last_distance, index_ida, index_vuelta):
-    
     # Calcula la distancia a la siguiente parada según la secuencia
+    fin_calculo = False
+
     print("Calculando distancia a la siguiente parada:")
-    if ida == True:
-        if index_ida < len(stops_ida):
-            [lat_parada, lon_parada] = coord_ida[index_ida]
-            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
-            
-            # Comprueba si ha pasado la parada
-            if parada_ya_pasada(last_distance, distancia):
-                index_ida += 1
+    while not fin_calculo: # Nos aseguramos que en el cambio de direccion se calcule la distancia a la nueva parada
+        fin_calculo = True
+
+        if ida == True:
+            if index_ida < len(stops_ida):
+                [lat_parada, lon_parada] = coord_ida[index_ida]
+                distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
                 
-                # Calcula la nueva distancia, hacia la siguiente parada
-                if index_ida < len(stops_ida):
-                    [lat_parada, lon_parada] = coord_ida[index_ida]
-                    distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+                # Comprueba si ha pasado la parada
+                if parada_ya_pasada(last_distance, distancia):
+                    index_ida += 1
+                    
+                    # Calcula la nueva distancia, hacia la siguiente parada
+                    if index_ida < len(stops_ida):
+                        [lat_parada, lon_parada] = coord_ida[index_ida]
+                        distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-                elif index_ida > len(stops_ida): # Ida completa, toca volver
-                    ida = False
-                    index_ida = 1
+                    elif index_ida >= len(stops_ida): # Ida completa, toca volver
+                        ida = False
+                        index_ida = 1
+                        fin_calculo = False
+            
 
-    else:
-        if index_vuelta < len(stops_vuelta):
-            [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
-            distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+        else:
+            if index_vuelta < len(stops_vuelta):
+                [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
+                distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-            if parada_ya_pasada(last_distance, distancia) and index_vuelta < len(stops_vuelta):
-                index_vuelta += 1
+                if parada_ya_pasada(last_distance, distancia) and index_vuelta < len(stops_vuelta):
+                    index_vuelta += 1
 
-                if index_ida < len(stops_ida):
-                    [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
-                    distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
+                    if index_ida < len(stops_ida):
+                        [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
+                        distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-                elif index_vuelta > len(stops_vuelta): # Retorno completo, toca ir
-                    ida = True
-                    index_vuelta = 1
+                    elif index_vuelta >= len(stops_vuelta): # Retorno completo, toca ir
+                        ida = True
+                        index_vuelta = 1
+                        fin_calculo = False
 
-    
+        
     last_distance = distancia
 
     return distancia, last_distance, index_ida, index_vuelta, ida
  
 
 def parada_ya_pasada(last_distance, now_distance):
-    # Comprueba si ha pasado la ultima parada
+    # Comprueba si ha pasado la parada anterior
     if last_distance < now_distance:
         return True
     else:
@@ -103,13 +112,16 @@ def calc_tiempo(distancia, velocidad):
 
 
 def write_influx(writer_api, bucket, org, tiempo_restante):
+    # Escribe el tiempo en influx
+
     point = influxdb_client.Point("mqtt_consumer").tag("device", "bus").field("tiempo_restante", tiempo_restante)
     # Habria que guardar la info en un tag con la id del dispositivo que envio las coordenadas
     writer_api.write(bucket=bucket, org=org, record=point)
 
 
 def lee_secuencia(df_gtfs, trip_id_ida, trip_id_vuelta):
-    # Coordenadas de las rutas
+    # Obtiene la secuencia de las rutas
+    
     coords_ida = []
     coords_vuelta = []
 
@@ -127,6 +139,7 @@ def lee_secuencia(df_gtfs, trip_id_ida, trip_id_vuelta):
 
 
 def tiempo_espera(proxima_medida):
+    # Establece el tiempo de espera para el siguiente mensaje
     if datetime.now(timezone.utc) < proxima_medida: # Comprueba la hora actual. Si es menor que la hora de la proxima medida, espera
             segundos_espera = (proxima_medida - datetime.now(timezone.utc)).total_seconds()
             print(f"Hora actual: {datetime.now(timezone.utc).strftime('%H:%M:%S')}")
@@ -167,7 +180,7 @@ while True:
     try:
         if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
             print("No hay nuevos datos en Influx. Esperando...")
-            time.sleep(1) # Pausa para dejar que lleguen los datos
+            time.sleep(1)
             continue
     except IndexError:
         print("No se han encontrado datos en Influx. Esperando...")
@@ -176,9 +189,9 @@ while True:
 
     # Avanza si hay datos nuevos:
     timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
-    lat_bus = data_influx[0].records[0].get_value()
-    lon_bus = data_influx[1].records[0].get_value()
-    v_bus = data_influx[2].records[0].get_value()
+    lat_bus = data_influx[0].records[0].get_value() # Latitud
+    lon_bus = data_influx[1].records[0].get_value() # Longitud
+    v_bus = data_influx[2].records[0].get_value() # Velocidad
 
 
 
@@ -195,7 +208,8 @@ while True:
     else:
         # Calcula la distancia a la siguiente parada
         [distancia, last_distance, index_ida, index_vuelta, modo_ida] = next_stop(lat_bus, lon_bus, seq_ida, seq_vuelta, coords_ida,
-                       coords_vuelta, modo_ida, last_distance, index_ida, index_vuelta)
+                                                                                coords_vuelta, modo_ida, last_distance, 
+                                                                                index_ida, index_vuelta)
 
         tiempo_restante = calc_tiempo(distancia, v_bus)
         print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
@@ -212,7 +226,8 @@ while True:
         else:
             proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
 
+        # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
         last_lat = lat_bus
         last_lon = lon_bus
 
-    tiempo_espera(proxima_medida)
+    tiempo_espera(proxima_medida) # Espera el tiempo teorico necesario para que llegue un mensaje nuevo
