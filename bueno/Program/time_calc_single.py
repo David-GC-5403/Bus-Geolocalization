@@ -28,15 +28,29 @@ def read_file():
 
     return gtfs_data
 
-def read_influx(reader_api, org):
+def read_influx(client):
     # Query para obtener los datos de influx
-    query = 'from(bucket: "Alumnos")\
-  |> range(start: -15m)\
-  |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")\
-  |> filter(fn: (r) => r["_field"] == "uplink_message_decoded_payload_decoded_latitud" or r["_field"] == "uplink_message_decoded_payload_decoded_longitud" or r["_field"] == "uplink_message_decoded_payload_decoded_v")\
-  |> last()'
+    query = '''
+        from(bucket: "Alumnos")
+        |> range(start: -15m)
+        |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")
+        |> filter(fn: (r) => 
+            r["_field"] == "uplink_message_decoded_payload_decoded_latitud" or
+            r["_field"] == "uplink_message_decoded_payload_decoded_longitud" or
+            r["_field"] == "uplink_message_decoded_payload_decoded_v")
+        |> last()
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        |> rename(columns: {
+            uplink_message_decoded_payload_decoded_latitud: "latitud",
+            uplink_message_decoded_payload_decoded_longitud: "longitud",
+            uplink_message_decoded_payload_decoded_v: "velocidad"
+        })        })
 
-    result = reader_api.query(org=org, query=query)
+        |> keep(columns: ["_time","latitud","longitud","velocidad"])
+    '''
+
+    result = client.query.api().query_data_frame() # Datos en dataframe
+
     return result
 
 def semiverseno(lat1, lon1, lat2, lon2):
@@ -152,25 +166,18 @@ def tiempo_espera(proxima_medida):
 
 # Configuración inicial
 
-while True:
-    try:
-        [writer, reader, org, bucket] = config_influx()
-        gtfs_data = read_file()
-        timestamp = None
-        last_distance = float('inf')
-        last_lat, last_lon = 0, 0
 
-        index_ida, index_vuelta = 1, 1 # Empieza en la segunda parada, ya que la primera es redundante
-                                       # (La primera de la ida es la ultima de la vuelta, y viceversa)
-        seq_ida, seq_vuelta = None, None 
-        ida = True
+[writer, reader, org, bucket] = config_influx()
+gtfs_data = read_file()
+timestamp = None
+last_distance = float('inf')
+last_lat, last_lon = 0, 0
 
-        break
+index_ida, index_vuelta = 1, 1 # Empieza en la segunda parada, ya que la primera es redundante
+                                # (La primera de la ida es la ultima de la vuelta, y viceversa)
+seq_ida, seq_vuelta = None, None 
+ida = True
 
-    except Exception as e:
-        print(f"Error al configurar InfluxDB o leer el archivo: {e}")
-        time.sleep(1)
-        continue
 
 # Loop principal
 while True:
