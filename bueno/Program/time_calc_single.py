@@ -28,35 +28,36 @@ def read_file():
 
     return gtfs_data
 
-def read_influx(client):
+def read_influx(reader_api, org):
     # Query para obtener los datos de influx
-    query = '''
-        from(bucket: "Alumnos")
-        |> range(start: -15m)
-        |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")
-        |> filter(fn: (r) => 
-            r["_field"] == "uplink_message_decoded_payload_decoded_latitud" or
-            r["_field"] == "uplink_message_decoded_payload_decoded_longitud" or
-            r["_field"] == "uplink_message_decoded_payload_decoded_v")
-        |> last()
-        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-        |> rename(columns: {
-            uplink_message_decoded_payload_decoded_latitud: "latitud",
-            uplink_message_decoded_payload_decoded_longitud: "longitud",
-            uplink_message_decoded_payload_decoded_v: "velocidad"
-        })        })
+    query = 'from(bucket: "Alumnos")\
+  |> range(start: -15m)\
+  |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")\
+  |> filter(fn: (r) => r["_field"] == "uplink_message_decoded_payload_decoded_latitud" or r["_field"] == "uplink_message_decoded_payload_decoded_longitud" or r["_field"] == "uplink_message_decoded_payload_decoded_v")\
+  |> last()'
 
-        |> keep(columns: ["_time","latitud","longitud","velocidad"])
-    '''
-
-    result = client.query.api().query_data_frame() # Datos en dataframe
-
+    result = reader_api.query(org=org, query=query)
     return result
+
 
 def semiverseno(lat1, lon1, lat2, lon2):
     # Calcula el semiverseno con las coordenadas dadas en metros
     return haversine((lat1, lon1), (lat2, lon2), unit='m')
 
+
+def distancia_a_paradas(lat_bus, lon_bus, lista_coords):
+    # Calcula la distancia desde la posicion actual hasta el resto de paradas
+
+    lista_distancias = []
+    
+    for i in range(len(lista_coords)):
+        [lat_stop, lon_stop] = lista_coords[i] # Coordenadas de la parada i
+
+        dist = semiverseno(lat_bus, lon_bus, lat_stop, lon_stop)
+        lista_distancias.append(dist)
+
+    return lista_distancias
+    
 
 def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida, 
               coord_vuelta, ida, last_distance, index_ida, index_vuelta):
@@ -71,9 +72,11 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
             if index_ida < len(stops_ida):
                 [lat_parada, lon_parada] = coord_ida[index_ida]
                 distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
-                
+
+                lista_distancias = distancia_a_paradas(lat_bus, lon_bus, coord_ida)
+
                 # Comprueba si ha pasado la parada
-                if parada_ya_pasada(last_distance, distancia):
+                if parada_ya_pasada(last_distance, distancia, lista_distancias, seq_ida):
                     index_ida += 1
                     
                     # Calcula la nueva distancia, hacia la siguiente parada
@@ -92,10 +95,12 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
                 [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
                 distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
-                if parada_ya_pasada(last_distance, distancia) and index_vuelta < len(stops_vuelta):
+                lista_distancias = distancia_a_paradas(lat_bus, lon_bus, coord_vuelta)
+
+                if parada_ya_pasada(last_distance, distancia, lista_distancias, seq_vuelta):
                     index_vuelta += 1
 
-                    if index_ida < len(stops_ida):
+                    if index_ida < len(stops_vuelta):
                         [lat_parada, lon_parada] = coord_vuelta[index_vuelta]
                         distancia = semiverseno(lat_bus, lon_bus, lat_parada, lon_parada)
 
@@ -110,12 +115,33 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
     return distancia, last_distance, index_ida, index_vuelta, ida
  
 
-def parada_ya_pasada(last_distance, now_distance):
-    # Comprueba si ha pasado la parada anterior
-    if last_distance < now_distance:
-        return True
+def parada_ya_pasada(last_distance, now_distance, dist_a_cada_parada, lista_ids, id_parada_1_old, id_parada_2_old):
+
+    dist_a_cada_parada_sorted = sorted(dist_a_cada_parada) # Ordena las distancias de menor a mayor
+
+    # Guarda las paradas más cercanas (valores minimos)
+    dist_parada_1 = dist_a_cada_parada_sorted[0] # Mas cercana
+    dist_parada_2 = dist_a_cada_parada_sorted[1] # Segunda mas cercana
+
+    # Sabiendo las distancias minimas, busca sus respectivos indices
+    in_parada_1 = dist_a_cada_parada.index(dist_parada_1)
+    in_parada_2 = dist_a_cada_parada.index(dist_parada_2)
+
+    # Como las distancias se calculan en el mismo orden en el que estan los ids, podemos obtener las paradas mas cercanas
+    id_parada_1 = lista_ids[in_parada_1]
+    id_parada_2 = lista_ids[in_parada_2]
+
+    # Comprueba si ha pasado la parada anterior ya sea porque aumenta la distancia o porque el par más cercano ha cambiado
+    if (last_distance < now_distance) or ((id_parada_1 and id_parada_2) != (id_parada_1_old and id_parada_2_old)):
+        id_parada_1_old = id_parada_1
+        id_parada_2_old = id_parada_2
+
+        result = True
+        return result, id_parada_1, id_parada_2
     else:
-        return False
+        result = False
+        return result, id_parada_1, id_parada_2
+    
 
 
 def calc_tiempo(distancia, velocidad):
