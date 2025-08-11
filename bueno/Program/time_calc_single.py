@@ -60,7 +60,7 @@ def distancia_a_paradas(lat_bus, lon_bus, lista_coords):
     
 
 def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida, 
-              coord_vuelta, ida, last_distance, index_ida, index_vuelta):
+              coord_vuelta, ida, last_distance, index_ida, index_vuelta, id_parada_1_old, id_parada_2_old):
     # Calcula la distancia a la siguiente parada según la secuencia
     fin_calculo = False
 
@@ -76,7 +76,8 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
                 lista_distancias = distancia_a_paradas(lat_bus, lon_bus, coord_ida)
 
                 # Comprueba si ha pasado la parada
-                if parada_ya_pasada(last_distance, distancia, lista_distancias, seq_ida):
+                [parada_pasada, id_parada_1_old, id_parada_2_old] = parada_ya_pasada(last_distance, distancia, lista_distancias, seq_ida, id_parada_1_old, id_parada_2_old)
+                if parada_pasada:
                     index_ida += 1
                     
                     # Calcula la nueva distancia, hacia la siguiente parada
@@ -97,7 +98,8 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
 
                 lista_distancias = distancia_a_paradas(lat_bus, lon_bus, coord_vuelta)
 
-                if parada_ya_pasada(last_distance, distancia, lista_distancias, seq_vuelta):
+                [parada_pasada, id_parada_1_old, id_parada_2_old] = parada_ya_pasada(last_distance, distancia, lista_distancias, seq_vuelta, id_parada_1_old, id_parada_2_old)
+                if parada_pasada:
                     index_vuelta += 1
 
                     if index_ida < len(stops_vuelta):
@@ -117,6 +119,8 @@ def next_stop(lat_bus, lon_bus, stops_ida, stops_vuelta, coord_ida,
 
 def parada_ya_pasada(last_distance, now_distance, dist_a_cada_parada, lista_ids, id_parada_1_old, id_parada_2_old):
 
+    result = False
+
     dist_a_cada_parada_sorted = sorted(dist_a_cada_parada) # Ordena las distancias de menor a mayor
 
     # Guarda las paradas más cercanas (valores minimos)
@@ -132,15 +136,16 @@ def parada_ya_pasada(last_distance, now_distance, dist_a_cada_parada, lista_ids,
     id_parada_2 = lista_ids[in_parada_2]
 
     # Comprueba si ha pasado la parada anterior ya sea porque aumenta la distancia o porque el par más cercano ha cambiado
-    if (last_distance < now_distance) or ((id_parada_1 and id_parada_2) != (id_parada_1_old and id_parada_2_old)):
-        id_parada_1_old = id_parada_1
-        id_parada_2_old = id_parada_2
+    if id_parada_1_old and id_parada_2_old != None:
+        if (last_distance < now_distance) or ((id_parada_1 and id_parada_2) != (id_parada_1_old and id_parada_2_old)):
+            result = True
+        else:
+            result = False
 
-        result = True
-        return result, id_parada_1, id_parada_2
-    else:
-        result = False
-        return result, id_parada_1, id_parada_2
+    id_parada_1_old = id_parada_1
+    id_parada_2_old = id_parada_2
+
+    return result, id_parada_1, id_parada_2
     
 
 
@@ -186,6 +191,9 @@ def tiempo_espera(proxima_medida):
             print(f"Esperando hasta: {proxima_medida.strftime('%H:%M:%S')} ({int(segundos_espera)} segundos)")
 
             time.sleep(segundos_espera)
+    else:
+        print("Hora actual es mayor que la hora de la proxima medida. No se espera nada.")
+        return 0  # No espera si la hora actual ya ha pasado la proxima medida
 
 
 # Main #
@@ -202,19 +210,23 @@ last_lat, last_lon = 0, 0
 index_ida, index_vuelta = 1, 1 # Empieza en la segunda parada, ya que la primera es redundante
                                 # (La primera de la ida es la ultima de la vuelta, y viceversa)
 seq_ida, seq_vuelta = None, None 
+modo_ida = True # Indica si estamos en la ruta de ida o de vuelta. True = ida, False = vuelta. Asume que empieza en la ida
 ida = True
-
+start = False
+id_parada_1_old, id_parada_2_old = None, None
 
 # Loop principal
 while True:
     # Obtención de datos de InfluxDB
     data_influx = read_influx(reader, org)
     # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
+
     try:
-        if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
-            print("No hay nuevos datos en Influx. Esperando...")
-            time.sleep(1)
-            continue
+        if start == False:
+            if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
+                print("No hay nuevos datos en Influx. Esperando...")
+                time.sleep(10)
+                continue
     except IndexError:
         print("No se han encontrado datos en Influx. Esperando...")
         time.sleep(30)
@@ -231,7 +243,9 @@ while True:
     # Lectura de secuencia
     if seq_ida is None or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
         try:
-            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(gtfs_data, id_ruta_ida, id_ruta_vuelta)            
+            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(gtfs_data, id_ruta_ida, id_ruta_vuelta)
+            start = True # Indica que se ha iniciado la secuencia y puede iniciar los calculos            
+            continue
 
         except Exception as e: 
             print(f"Error al leer la secuencia: {e}")
@@ -242,7 +256,7 @@ while True:
         # Calcula la distancia a la siguiente parada
         [distancia, last_distance, index_ida, index_vuelta, modo_ida] = next_stop(lat_bus, lon_bus, seq_ida, seq_vuelta, coords_ida,
                                                                                 coords_vuelta, modo_ida, last_distance, 
-                                                                                index_ida, index_vuelta)
+                                                                                index_ida, index_vuelta, id_parada_1_old, id_parada_2_old)
 
         tiempo_restante = calc_tiempo(distancia, v_bus)
         print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
@@ -255,12 +269,15 @@ while True:
 
         cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50  # Cambia brusco si se mueve más de 50 metros
         if cambio_brusco:
-            proxima_medida = timestamp + timedelta(minutes=1) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
+            proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
         else:
-            proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
+            proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
 
         # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
         last_lat = lat_bus
         last_lon = lon_bus
 
+    print(f"Hora a la que llego el mensaje: {timestamp.strftime('%H:%M:%S')}")
+    start = False
     tiempo_espera(proxima_medida) # Espera el tiempo teorico necesario para que llegue un mensaje nuevo
+    
