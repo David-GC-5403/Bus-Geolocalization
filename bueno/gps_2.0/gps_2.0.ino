@@ -16,16 +16,20 @@ TinyGPSPlus gps;
 #define precision 10
 
 // Variables globales
-float lat[precision];
-float lng[precision];
 float lat_old = 0, lng_old = 0;
 float distancia = 0;
 
 int i = 0;
+int j = 0;
 int ultimo_envio = 0;
+int ultima_v = 0;
 int counter = 0;
 
 bool cambio_brusco = false;
+
+float lat[precision];
+float lng[precision];
+float v[5];
 
 //char buffer[256];
 
@@ -50,7 +54,7 @@ void setup()
 
   //Serial.println("JOINED");
 
-  frame.printDecoder = false; // Decoder de tinyframe. Útil para decodificar el payload en la TTN
+  frame.printDecoder = true; // Decoder de tinyframe. Útil para decodificar el payload en la TTN
 }
 
 void loop()
@@ -72,10 +76,12 @@ void loop()
         // Inicia valores medios:
         float lat_m = 0;
         float lng_m = 0;
+        float v_m = 0;
 
         // Promedia las medidas
         lat_m = average(lat, precision);
         lng_m = average(lng, precision);
+        v_m = average(v, 5);
 
         // Descomentar para ver los valores medios en pantalla
         /*
@@ -86,14 +92,13 @@ void loop()
         */
 
         // Envia datos a la TTN
-        //memset(buffer, 0, 256);
-        envio_lora(lat_m, lng_m);
+        envio_lora(lat_m, lng_m, v_m);
 
         // Calcula la distancia con la posicion anterior
         distancia = dist_semiverseno(lat_old, lat_m, lng_old, lng_m);
         //Serial.println(distancia);
         
-        // Guarda los valores actuales
+        // Guarda las coordenadas actuales
         lat_old = lat_m;
         lng_old = lng_m;
 
@@ -104,16 +109,30 @@ void loop()
           cambio_brusco = false;
         }
 
-        // Reinicia los array
+        // Reinicia los arrays
         memset(lat, 0, sizeof(lat));
         memset(lng, 0, sizeof(lng));
+        memset(v, 0, sizeof(v));
         i = 0;
 
         // Tiempo de espera si el mensaje se envio exitosamente
         if (cambio_brusco == false){
           while((millis() - ultimo_envio) < 1000*60*5){} // 5 minutos si no hubo cambio brusco
+            if ((millis() - ultima_v) > 1000*60){
+              v[j] = gps.speed.mps();
+              ultima_v = millis();
+              //Serial.println(v[j]);
+              //j++;
+            }
         } else {
-          while((millis() - ultimo_envio) < 1000*60*2){} // 2 minutos si hubo cambio brusco
+          while((millis() - ultimo_envio) < 1000*60*3){
+            if ((millis() - ultima_v) > 1000*60){
+              v[j] = gps.speed.kmph();
+              ultima_v = millis();
+              //Serial.println(v[j]);
+              //j++;
+            }
+          }
         }
       }
     }
@@ -193,7 +212,7 @@ void setup_lora (){
   lora.setId(NULL, devEUI, AppEUI);
 
   lora.setDeciveMode(LWOTAA);
-  lora.setDataRate(DR4, EU868);
+  lora.setDataRate(DR5, EU868);
 
   lora.setDutyCycle(true);
   lora.setJoinDutyCycle(true);
@@ -202,31 +221,19 @@ void setup_lora (){
 
 }
 
-void envio_lora(float latitude, float longitude){
+void envio_lora(float latitude, float longitude, float v){
   // Envia la información
+  while(!lora.setOTAAJoin(JOIN));
   frame.clear();
   frame.append_int32_t((int32_t) (latitude*1000000.0));
   frame.append_int32_t((int32_t) (longitude*1000000.0));
+  frame.append_int8_t((int8_t) (v*100.0));
 
-  // Envía el mensaje a TTN
-  /*
-  Serial.println("Intentando enviar: ");
-  
-  if (lora.transferPacket(frame.buffer, 10)){
-    SerialUSB.println("Data sent");
-    ultimo_envio = millis();
-  } else {
-    SerialUSB.println("Error");
-    error_envio = true;
-  }
-  */
-
-  //Serial.println("Intentando enviar");
-
-  for (counter = 0;counter <= 3;counter++){
-    lora.transferPacket(frame.buffer, 10);
-  }
+  //for (counter = 0;counter <= 3;counter++){
+  lora.transferPacket(frame.buffer, 10);
+  //}
   //SerialUSB.println("Data sent");
+
   ultimo_envio = millis();
 }
 
@@ -245,4 +252,3 @@ float dist_semiverseno(float lat_1, float lat_2, float lng_1, float lng_2){
 
   return d;
 }
-
