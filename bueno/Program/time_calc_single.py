@@ -223,7 +223,7 @@ while True:
 
     try:
         if start == False:
-            if data_influx[0].records[0].get_time() == timestamp or data_influx[0].records[0].get_value() is None:
+            if data_influx[0].records[0].get_time() == timestamp:
                 print("No hay nuevos datos en Influx. Esperando...")
                 time.sleep(10)
                 continue
