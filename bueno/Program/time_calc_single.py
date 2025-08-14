@@ -249,7 +249,6 @@ while True:
 
         except Exception as e: 
             print(f"Error al leer la secuencia: {e}")
-            #time.sleep(60)
             continue
     
     else:
@@ -267,7 +266,7 @@ while True:
         except Exception as e:
             print(f"Error al escribir en InfluxDB: {e}")
 
-        cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50  # Cambia brusco si se mueve más de 50 metros
+        cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
         if cambio_brusco:
             proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
         else:
