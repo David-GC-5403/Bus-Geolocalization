@@ -23,7 +23,8 @@ int i = 0;
 int j = 0;
 int ultimo_envio = 0;
 int ultima_v = 0;
-int counter = 0;
+//int counter = 0;
+int avg_v = 0;
 
 bool cambio_brusco = false;
 
@@ -81,7 +82,7 @@ void loop()
         // Promedia las medidas
         lat_m = average(lat, precision);
         lng_m = average(lng, precision);
-        v_m = average(v, 5);
+        v_m = average(v, avg_v);
 
         // Descomentar para ver los valores medios en pantalla
         /*
@@ -102,8 +103,8 @@ void loop()
         lat_old = lat_m;
         lng_old = lng_m;
 
-        // Selecciona si ha habido un cambio de posicion brusco
-        if (distancia >= 50){
+        // Selecciona si ha habido un cambio de posicion brusco (50 km)
+        if (distancia >= 50*1000){
           cambio_brusco = true;
         } else {
           cambio_brusco = false;
@@ -114,23 +115,24 @@ void loop()
         memset(lng, 0, sizeof(lng));
         memset(v, 0, sizeof(v));
         i = 0;
+        j = 0;
 
         // Tiempo de espera si el mensaje se envio exitosamente
         if (cambio_brusco == false){
+          avg_v = 5;
           while((millis() - ultimo_envio) < 1000*60*5){} // 5 minutos si no hubo cambio brusco
             if ((millis() - ultima_v) > 1000*60){
               v[j] = gps.speed.mps();
               ultima_v = millis();
-              //Serial.println(v[j]);
-              //j++;
+              j++;
             }
         } else {
+          avg_v = 3;
           while((millis() - ultimo_envio) < 1000*60*3){
             if ((millis() - ultima_v) > 1000*60){
-              v[j] = gps.speed.kmph();
+              v[j] = gps.speed.mps();
               ultima_v = millis();
-              //Serial.println(v[j]);
-              //j++;
+              j++;
             }
           }
         }

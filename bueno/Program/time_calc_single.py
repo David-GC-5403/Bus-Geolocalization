@@ -180,7 +180,7 @@ def parada_ya_pasada(last_distance, now_distance, dist_a_cada_parada, lista_ids,
     
 
 def calc_tiempo(distancia, velocidad):
-    # Calcula el tiempo en segundos que tarda en recorrer una distancia a una velocidad dada
+    # Calcula el tiempo en segundos que tarda en recorrer una distancia a una velocidad (m/s) dada
     if velocidad <= 0:
         return float('inf')  # Evita división por cero
     return distancia / velocidad
