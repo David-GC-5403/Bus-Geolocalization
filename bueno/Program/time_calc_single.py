@@ -6,9 +6,6 @@ import time
 import pandas as pd
 
 
-lat_pruebas = [0, 36.125928, 36.12823, 36.13971591464247, 36.159335, 36.17858, 36.1834259802199, 36.17858, 36.159335, 36.13971591464247, 36.12823, 36.125928, 0]
-lon_pruebas = [0, -5.4483521, -5.4448381, -5.450835848263164, -5.4614903, -5.4848433, -5.494353118771663, -5.4848433, -5.4614903, -5.450835848263164, -5.4448381, -5.4483521, 0]
-
 # Vamos a hacer la ruta primero de Algeciras a los barrios
 id_ruta_ida = "5_395_90" # Trip id de la primera ruta (siempre es la misma)
 id_ruta_vuelta = "5_410_90" # Trip id de la ruta de vuelta
@@ -182,7 +179,6 @@ def parada_ya_pasada(last_distance, now_distance, dist_a_cada_parada, lista_ids,
     return result, id_parada_1_old, id_parada_2_old, next_stop_pass, last_stop_pass
     
 
-
 def calc_tiempo(distancia, velocidad):
     # Calcula el tiempo en segundos que tarda en recorrer una distancia a una velocidad dada
     if velocidad <= 0:
@@ -254,31 +250,27 @@ id_parada_1_old, id_parada_2_old = None, None
 
 # Loop principal
 while True:
-    for i in range(len(lat_pruebas)):
-#        # Obtención de datos de InfluxDB
-#        data_influx = read_influx(reader, org)
-#        # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
-#
-#        try:
-#            if start == False:
-#                if data_influx[0].records[0].get_time() == timestamp:
-#                    print("No hay nuevos datos en Influx. Esperando...")
-#                    time.sleep(10)
-#                    continue
-#        except IndexError:
-#           print("No se han encontrado datos en Influx. Esperando...")
-#            time.sleep(30)
-#            continue
+
+        # Obtención de datos de InfluxDB
+        data_influx = read_influx(reader, org)
+        # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
+
+        try:
+            if start == False:
+                if data_influx[0].records[0].get_time() == timestamp:
+                    print("No hay nuevos datos en Influx. Esperando...")
+                    time.sleep(10)
+                    continue
+        except IndexError:
+            print("No se han encontrado datos en Influx. Esperando...")
+            time.sleep(30)
+            continue
 
         # Avanza si hay datos nuevos:
-#        timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
-#        lat_bus = data_influx[0].records[0].get_value() # Latitud
-#        lon_bus = data_influx[1].records[0].get_value() # Longitud
-#        v_bus = data_influx[2].records[0].get_value() # Velocidad
-
-        lat_bus = lat_pruebas[i]
-        lon_bus = lon_pruebas[i]
-        v_bus = 10
+        timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
+        lat_bus = data_influx[0].records[0].get_value() # Latitud
+        lon_bus = data_influx[1].records[0].get_value() # Longitud
+        v_bus = data_influx[2].records[0].get_value() # Velocidad
 
         # Lectura de secuencia
         if seq_ida is None or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
@@ -307,19 +299,18 @@ while True:
             except Exception as e:
                 print(f"Error al escribir en InfluxDB: {e}")
 
-#            cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
-#            if cambio_brusco:
-#                proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
-#            else:
-#                proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
+                cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
+                if cambio_brusco:
+                    proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
+                else:
+                    proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
 
             # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
-#            last_lat = lat_bus
-#            last_lon = lon_bus
+                last_lat = lat_bus
+                last_lon = lon_bus
 
-#        print(f"Hora a la que llego el mensaje: {timestamp.strftime('%H:%M:%S')}")
-#        start = False
-#        tiempo_espera(proxima_medida) # Espera el tiempo teorico necesario para que llegue un mensaje nuevo
+            print(f"Hora a la que llego el mensaje: {timestamp.strftime('%H:%M:%S')}")
+            start = False
+            tiempo_espera(proxima_medida) # Espera el tiempo teorico necesario para que llegue un mensaje nuevo
 
-    print("FIN PROGRAMA")
-    
+        print("FIN PROGRAMA")
