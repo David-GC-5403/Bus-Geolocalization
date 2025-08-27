@@ -251,66 +251,64 @@ id_parada_1_old, id_parada_2_old = None, None
 # Loop principal
 while True:
 
-        # Obtención de datos de InfluxDB
-        data_influx = read_influx(reader, org)
-        # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
+    # Obtención de datos de InfluxDB
+    data_influx = read_influx(reader, org)
+    # Comprueba si hay datos nuevos viendo si ha cambiado el timestamp
 
+    try:
+        if start == False:
+            if data_influx[0].records[0].get_time() == timestamp:
+                print("No hay nuevos datos en Influx. Esperando...")
+                time.sleep(10)
+                continue
+    except IndexError:
+        print("No se han encontrado datos en Influx. Esperando...")
+        time.sleep(30)
+        continue
+
+    # Avanza si hay datos nuevos:
+    timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
+    lat_bus = data_influx[0].records[0].get_value() # Latitud
+    lon_bus = data_influx[1].records[0].get_value() # Longitud
+    v_bus = data_influx[2].records[0].get_value() # Velocidad
+
+    # Lectura de secuencia
+    if seq_ida is None or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
         try:
-            if start == False:
-                if data_influx[0].records[0].get_time() == timestamp:
-                    print("No hay nuevos datos en Influx. Esperando...")
-                    time.sleep(10)
-                    continue
-        except IndexError:
-            print("No se han encontrado datos en Influx. Esperando...")
-            time.sleep(30)
+            [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(gtfs_data, id_ruta_ida, id_ruta_vuelta)
+            start = True # Indica que se ha iniciado la secuencia y puede iniciar los calculos            
             continue
 
-        # Avanza si hay datos nuevos:
-        timestamp = data_influx[0].records[0].get_time() # Hora de llegada de los datos
-        lat_bus = data_influx[0].records[0].get_value() # Latitud
-        lon_bus = data_influx[1].records[0].get_value() # Longitud
-        v_bus = data_influx[2].records[0].get_value() # Velocidad
+        except Exception as e: 
+            print(f"Error al leer la secuencia: {e}")
+            continue
+    
+    else:
+        # Calcula la distancia a la siguiente parada
+        [distancia, last_distance, index_ida, index_vuelta, modo_ida, id_parada_1_old, id_parada_2_old] = next_stop(lat_bus, lon_bus, seq_ida, seq_vuelta, coords_ida,
+                                                                                coords_vuelta, modo_ida, last_distance, 
+                                                                                index_ida, index_vuelta, id_parada_1_old, id_parada_2_old, 
+                                                                                next_stop_pass, last_stop_pass)
 
-        # Lectura de secuencia
-        if seq_ida is None or seq_vuelta is None: # Si aun no se han establecido las rutas, las crea
-            try:
-                [seq_ida, coords_ida, seq_vuelta, coords_vuelta] = lee_secuencia(gtfs_data, id_ruta_ida, id_ruta_vuelta)
-                start = True # Indica que se ha iniciado la secuencia y puede iniciar los calculos            
-                continue
+        tiempo_restante = calc_tiempo(distancia, v_bus)
+        print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
 
-            except Exception as e: 
-                print(f"Error al leer la secuencia: {e}")
-                continue
-        
-        else:
-            # Calcula la distancia a la siguiente parada
-            [distancia, last_distance, index_ida, index_vuelta, modo_ida, id_parada_1_old, id_parada_2_old] = next_stop(lat_bus, lon_bus, seq_ida, seq_vuelta, coords_ida,
-                                                                                    coords_vuelta, modo_ida, last_distance, 
-                                                                                    index_ida, index_vuelta, id_parada_1_old, id_parada_2_old, 
-                                                                                    next_stop_pass, last_stop_pass)
+        try:
+            write_influx(writer, bucket, org, tiempo_restante)
+            print("Datos escritos en Influx")
+        except Exception as e:
+            print(f"Error al escribir en InfluxDB: {e}")
 
-            tiempo_restante = calc_tiempo(distancia, v_bus)
-            print(f"Tiempo restante para llegar a la parada más cercana: {tiempo_restante:.2f} segundos")
+            cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
+            if cambio_brusco:
+                proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
+            else:
+                proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
 
-            try:
-                write_influx(writer, bucket, org, tiempo_restante)
-                print("Datos escritos en Influx")
-            except Exception as e:
-                print(f"Error al escribir en InfluxDB: {e}")
+        # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
+            last_lat = lat_bus
+            last_lon = lon_bus
 
-                cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
-                if cambio_brusco:
-                    proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
-                else:
-                    proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
-
-            # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
-                last_lat = lat_bus
-                last_lon = lon_bus
-
-            print(f"Hora a la que llego el mensaje: {timestamp.strftime('%H:%M:%S')}")
-            start = False
-            tiempo_espera(proxima_medida) # Espera el tiempo teorico necesario para que llegue un mensaje nuevo
-
-        print("FIN PROGRAMA")
+        print(f"Hora a la que llego el mensaje: {timestamp.strftime('%H:%M:%S')}")
+        start = False
+        tiempo_espera(proxima_medida) # Espera el tiempo teorico necesario para que llegue un mensaje nuevo
