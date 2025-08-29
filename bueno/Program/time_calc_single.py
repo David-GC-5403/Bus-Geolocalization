@@ -305,8 +305,8 @@ while True:
             proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
 
         # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
-            last_lat = lat_bus
-            last_lon = lon_bus
+        last_lat = lat_bus
+        last_lon = lon_bus
 
         print(f"Hora a la que llego el mensaje: {timestamp.strftime('%H:%M:%S')}")
         start = False
