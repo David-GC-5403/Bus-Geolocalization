@@ -247,7 +247,6 @@ ida = True
 start = False
 id_parada_1_old, id_parada_2_old = None, None
 
-
 # Loop principal
 while True:
 

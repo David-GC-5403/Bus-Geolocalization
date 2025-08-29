@@ -7,5 +7,5 @@ En "bueno" se encuentran los ficheros. Dentro aparecen en orden: "Program", "doc
 
 + Program: Contiene los archivos csv utilizados, así como el código de python.
 + docs: El icono de autobus utilizado en grafana y el geojson para mostrar las paradas
-+ gps_2.0: Programa implementado en el Seeeduino, junto con la libreria tinyframe.
++ gps_2.0: Programa implementado en el Seeeduino, junto con las librerias utilizadas.
 + gtfs: Contiene todos los archivos gtfs de Andalucía, actualizados a fecha de julio de 2025.

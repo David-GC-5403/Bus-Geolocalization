@@ -94,20 +94,6 @@ struct tinyFrame {
         }
         FRAME_SERIAL.println();
     }
-
-    void hexChar(char *buff, uint16_t size){
-        if (size < idx*2){
-            FRAME_SERIAL.println("no enough size to hexChar representation");
-            return;
-        }
-        strcpy(buff, "");
-        for(unsigned char i = 0; i < idx; i++)
-        {
-            sprintf(buff+i*2, "%02X", buffer[i]);
-        }
-
-        return;
-    }
 };
 
 
