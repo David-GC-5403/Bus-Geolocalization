@@ -298,11 +298,11 @@ while True:
         except Exception as e:
             print(f"Error al escribir en InfluxDB: {e}")
 
-            cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
-            if cambio_brusco:
-                proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
-            else:
-                proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
+        cambio_brusco = semiverseno(lat_bus, lon_bus, last_lat, last_lon) > 50*1000  # Cambia brusco si se mueve más de 50 metros
+        if cambio_brusco:
+            proxima_medida = timestamp + timedelta(minutes=3) # Espera al siguiente mensaje, al minuto, si hay cambio brusco
+        else:
+            proxima_medida = timestamp + timedelta(minutes=5) # Espera al siguiente mensaje, a los 3 minutos, si no hay cambio brusco
 
         # Guarda las coordenadas para el cambio brusco de la siguiente iteracion
             last_lat = lat_bus
